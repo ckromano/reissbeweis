@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Winkelsumme im Dreieck – Ecken abreissen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --rot:#e5484d; --blau:#2f7de1; --gelb:#f2c200;
+    --papier:#dff0e3; --papierRand:#3d7a5a;
+    --ink:#1f2a33; --muted:#5b6670; --bg:#fbfaf6; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Nunito,system-ui,sans-serif;color:var(--ink);background:var(--bg);}
+  .wrap{max-width:980px;margin:0 auto;padding:16px 14px 28px;}
+  h1{font-size:clamp(20px,3.4vw,28px);margin:4px 0 2px;font-weight:800}
+  .sub{color:var(--muted);margin:0 0 12px;font-size:15px}
+  .stage{background:var(--card);border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.08),0 6px 24px rgba(0,0,0,.05);overflow:hidden}
+  svg{display:block;width:100%;height:auto;touch-action:manipulation}
+  .controls{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 16px 16px;flex-wrap:wrap}
+  .btns{display:flex;gap:8px}
+  button{font:inherit;font-weight:700;border:0;border-radius:999px;padding:10px 18px;cursor:pointer;background:#eef0f2;color:var(--ink)}
+  button.primary{background:var(--ink);color:#fff}
+  button:disabled{opacity:.35;cursor:default}
+  .dots{display:flex;gap:6px}
+  .dot{width:10px;height:10px;border-radius:50%;background:#d5d9dd;cursor:pointer}
+  .dot.on{background:var(--ink)}
+  .piece{transition:transform 1.2s cubic-bezier(.6,.05,.25,1);}
+  .fade{transition:opacity .7s}
+  .edge{transition:stroke-opacity .5s}
+  .r{fill:var(--rot)} .b{fill:var(--blau)} .y{fill:var(--gelb)}
+  .lbl{font:800 22px Nunito,sans-serif;fill:#22313b;text-anchor:middle;dominant-baseline:central}
+  .cap{font:700 22px Nunito,sans-serif;fill:var(--ink);text-anchor:middle}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;padding:0 16px 4px;color:var(--muted);font-size:14px}
+  .legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:var(--c)}
+  @media (prefers-reduced-motion: reduce){.piece,.fade,.edge{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ecken abreissen – die Winkelsumme im Dreieck</h1>
+  <p class="sub">Schritt für Schritt: mit «Weiter» oder «Abspielen».</p>
+  <div class="stage">
+    <svg id="svg" viewBox="0 0 800 450" aria-label="Animation: Ecken eines Dreiecks abreissen und an einer Geraden anlegen"></svg>
+    <div class="legend">
+      <span style="--c:var(--rot)">α rot</span>
+      <span style="--c:var(--blau)">β blau</span>
+      <span style="--c:var(--gelb)">γ gelb</span>
+    </div>
+    <div class="controls">
+      <div class="dots" id="dots"></div>
+      <div class="btns">
+        <button id="prev">Zurück</button>
+        <button id="play">Abspielen</button>
+        <button id="next" class="primary">Weiter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("svg");
+const el=(n,a={},p=svg)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;};
+const add=(p,q)=>[p[0]+q[0],p[1]+q[1]], sub=(p,q)=>[p[0]-q[0],p[1]-q[1]], mul=(p,s)=>[p[0]*s,p[1]*s];
+const norm=d=>{const l=Math.hypot(d[0],d[1]);return [d[0]/l,d[1]/l];};
+const pts=a=>a.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ");
+
+// ---------- Dreieck ----------
+const A=[60,300], B=[395,300], C=[172,77];
+const V=[A,B,C];
+const roles=["r","b","y"], names=["α","β","γ"];
+const D=88;          // Abstand der Reisslinie von der Ecke
+const M=[610,400];   // Treffpunkt auf der Geraden
+
+// Reisslinie (Zickzack) für jede Ecke, in Weltkoordinaten
+function zigzag(P1,P2,seed){
+  const n=7, d=sub(P2,P1), nrm=norm([-d[1],d[0]]), out=[P1];
+  for(let k=1;k<n;k++){
+    const amp=(k%2?1:-1)*(4+((seed*13+k*7)%5));
+    out.push(add(add(P1,mul(d,k/n)),mul(nrm,amp)));
+  }
+  out.push(P2);return out;
+}
+const tears=V.map((v,q)=>{
+  const n1=V[(q+1)%3], n2=V[(q+2)%3];
+  const P1=add(v,mul(norm(sub(n1,v)),D)), P2=add(v,mul(norm(sub(n2,v)),D));
+  return zigzag(P1,P2,q+1); // von Kante zu n1 nach Kante zu n2
+});
+
+// ---------- Gerade ----------
+const lineG=el("g",{class:"fade",opacity:0});
+el("line",{x1:420,y1:M[1],x2:785,y2:M[1],stroke:"var(--ink)","stroke-width":3,"stroke-linecap":"round"},lineG);
+
+// ---------- Restkörper ----------
+const body=[];
+for(let q=0;q<3;q++){
+  // Reisslinie der Ecke q läuft von Kante (q,q+1) nach Kante (q,q+2); im Umlauf A->B->C
+  // brauchen wir sie rückwärts: von Kante (q,q-1) zu Kante (q,q+1)
+  body.push(...tears[q].slice().reverse());
+}
+const bodyG=el("g",{class:"fade"});
+const bodyPoly=el("polygon",{points:pts(body),fill:"var(--papier)",stroke:"var(--papierRand)","stroke-width":2,"stroke-linejoin":"round",class:"edge","stroke-opacity":0},bodyG);
+
+// ---------- Ecken-Stücke ----------
+function sectorPath(P1,P2,r){
+  const d1=norm(P1),d2=norm(P2);
+  const cr=d1[0]*d2[1]-d1[1]*d2[0], s=cr>0?1:0;
+  return `M0,0 L${r*d1[0]},${r*d1[1]} A${r},${r} 0 0 ${s} ${r*d2[0]},${r*d2[1]} Z`;
+}
+const ang=(p)=>Math.atan2(p[1],p[0])*180/Math.PI;
+const alpha=(()=>{const a=ang(sub(B,A)),c=ang(sub(C,A));return Math.abs(a-c);})();
+const beta =(()=>{const a=ang(sub(A,B)),c=ang(sub(C,B));let d=Math.abs(a-c);return d>180?360-d:d;})();
+
+const pieces=V.map((v,q)=>{
+  const g=el("g",{class:"piece"});
+  const local=[[0,0],...tears[q].map(p=>sub(p,v))];
+  el("polygon",{points:pts(local),fill:"var(--papier)",stroke:"var(--papierRand)","stroke-width":2,"stroke-linejoin":"round",class:"edge","stroke-opacity":0},g);
+  const n1=sub(V[(q+1)%3],v), n2=sub(V[(q+2)%3],v);
+  const col=el("g",{class:"fade",opacity:0},g);
+  el("path",{d:sectorPath(n1,n2,40),class:roles[q]},col);
+  const bd=norm(add(norm(n1),norm(n2)));
+  const lx=bd[0]*58, ly=bd[1]*58;
+  const t=el("text",{x:lx,y:ly,class:"lbl"},col);t.textContent=names[q];
+  return {g,col,t,v,q,bd,edge:g.querySelector("polygon")};
+});
+
+// Endrotationen: an M nebeneinander, α links, γ Mitte, β rechts (obere Halbebene)
+const finalRot=[-180+alpha, 180-beta, -beta-ang(sub(A,C))];
+
+// Umriss (vor dem Reissen)
+const outline=el("polygon",{points:pts(V),fill:"none",stroke:"var(--papierRand)","stroke-width":2.5,"stroke-linejoin":"round",class:"fade"});
+
+// Ergebnis
+const resG=el("g",{class:"fade",opacity:0});
+el("path",{d:`M${M[0]-125},${M[1]} A125,125 0 0 1 ${M[0]+125},${M[1]}`,fill:"none",stroke:"var(--ink)","stroke-width":3,"stroke-dasharray":"7 6"},resG);
+el("circle",{cx:M[0],cy:M[1],r:5,fill:"var(--ink)"},resG);
+const capBox=el("g",{class:"fade",opacity:0});
+el("rect",{x:470,y:18,width:310,height:54,rx:12,fill:"#fff",stroke:"#e1e5e8"},capBox);
+const capT=el("text",{x:625,y:53,class:"cap"},capBox);capT.textContent="α + β + γ = 180°";
+
+// ---------- Schritte ----------
+const N=6;
+const dots=document.getElementById("dots");
+for(let i=0;i<N;i++){const d=document.createElement("div");d.className="dot";d.onclick=()=>{stopPlay();go(i);};dots.appendChild(d);}
+
+function place(p,pos,rot,delay){
+  p.g.style.transitionDelay=delay+"ms";
+  p.g.style.transform=`translate(${pos[0]}px,${pos[1]}px) rotate(${rot}deg)`;
+  p.t.setAttribute("transform",`rotate(${-rot} ${p.t.getAttribute("x")} ${p.t.getAttribute("y")})`);
+}
+let cur=-1;
+function go(i){
+  cur=i;
+  [...dots.children].forEach((d,k)=>d.classList.toggle("on",k===i));
+  document.getElementById("prev").disabled=i===0;
+  document.getElementById("next").disabled=i===N-1;
+
+  const torn=i>=2;
+  outline.setAttribute("opacity",torn?0:1);
+  bodyPoly.setAttribute("stroke-opacity",torn?1:0);
+  bodyG.setAttribute("opacity", i>=3?0.18:1);
+  lineG.setAttribute("opacity", i>=3?1:0);
+
+  pieces.forEach((p,k)=>{
+    p.edge.setAttribute("stroke-opacity",torn?1:0);
+    p.col.setAttribute("opacity", i>=1?1:0);
+    if(i<2) place(p,p.v,0,0);
+    else if(i===2||i===3){
+      const jitter=[-8,10,-6][k];
+      place(p,add(p.v,mul(p.bd,-36)),jitter,i===2?k*180:0);
+    } else place(p,M,finalRot[k],i===4?k*450:0);
+  });
+  resG.setAttribute("opacity", i===5?1:0);
+  capBox.setAttribute("opacity", i===5?1:0);
+}
+
+let timer=null;
+const playBtn=document.getElementById("play");
+function stopPlay(){clearInterval(timer);timer=null;playBtn.textContent="Abspielen";}
+playBtn.onclick=()=>{
+  if(timer){stopPlay();return;}
+  if(cur>=N-1) go(0);
+  playBtn.textContent="Pause";
+  timer=setInterval(()=>{ if(cur<N-1) go(cur+1); else stopPlay(); },3200);
+};
+document.getElementById("next").onclick=()=>{stopPlay();if(cur<N-1)go(cur+1);};
+document.getElementById("prev").onclick=()=>{stopPlay();if(cur>0)go(cur-1);};
+document.addEventListener("keydown",e=>{if(e.key==="ArrowRight")document.getElementById("next").click();if(e.key==="ArrowLeft")document.getElementById("prev").click();});
+
+go(0);
+})();
+</script>
+</body>
+</html>
